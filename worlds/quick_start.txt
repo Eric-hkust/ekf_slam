@@ -1,0 +1,21 @@
+cd ~/cxz/ws
+source devel/setup.bash
+export TURTLEBOT3_MODEL=burger
+roslaunch ekf_slam ekf_slam_world.launch
+
+cd ~/cxz/ws
+source devel/setup.bash
+roslaunch turtlebot3_teleop turtlebot3_teleop_key.launch
+
+cd ~/cxz/ws
+source devel/setup.bash
+export TURTLEBOT3_MODEL=burger
+roslaunch turtlebot3_gazebo turtlebot3_gazebo_rviz.launch
+
+cd ~/cxz/ws/src/ekf_slam/bagfiles
+rosbag play 1.bag
+
+cd ~/cxz/ws
+source devel/setup.bash
+export TURTLEBOT3_MODEL=burger
+rosrun ekf_slam listener

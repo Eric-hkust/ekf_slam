@@ -1,0 +1,112 @@
+#include "ros/ros.h"
+#include "nav_msgs/Odometry.h"
+#include "sensor_msgs/Imu.h"
+#include "sensor_msgs/LaserScan.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "geometry_msgs/Twist.h"
+#include "tf/transform_broadcaster.h"
+#include "../include/ekf_slam/point_solver.h"
+#include "../include/ekf_slam/ekf_slam_solver.h"
+
+CoordPoint current_pose;
+CoordPoint estimate_pose;
+PointSolver point_solver;
+EkfSlamSolver ekf_slam_solver;
+
+void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
+{
+  //get position
+  current_pose.x = msg->pose.pose.position.x;
+  current_pose.y = msg->pose.pose.position.y;
+  //get 2d eular_angle
+  double roll,pitch,yaw;
+  tf2::Quaternion quat_tf;
+  tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
+  tf2::Matrix3x3(quat_tf).getRPY(roll,pitch,yaw);
+  current_pose.angle = yaw;
+
+  // ROS_INFO("Node listener heard Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
+}
+
+void ImuCallback(const sensor_msgs::Imu::ConstPtr& msg)
+{
+  double acceleration[2];
+  double angular_velocity;
+  double eular_angle;
+  
+  // get 2d eular_angle
+  double roll,pitch,yaw;
+  tf2::Quaternion quat_tf;
+  tf2::fromMsg(msg->orientation, quat_tf);
+  tf2::Matrix3x3(quat_tf).getRPY(roll,pitch,yaw);
+  eular_angle = yaw;
+  // get acceleration
+  acceleration[0] = msg->linear_acceleration.x;
+  acceleration[1] = msg->linear_acceleration.y;
+  //get angular_velocity
+  angular_velocity = msg->angular_velocity.z;
+  
+  // ROS_INFO("Node listener heard Odom: eular_angle=%f, acceleration=(%f,%f), angular_velocity=%f", \
+           eular_angle,acceleration[0], acceleration[1], angular_velocity);
+}
+
+void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
+{
+  std::vector<PolarPoint> polar_points;
+  std::vector<CoordPoint> coord_points;
+  CoordPoint movement;
+  double angle_increment;
+  size_t scan_size;
+
+  angle_increment = msg->angle_increment;
+  scan_size = msg->ranges.size();
+  PolarPoint new_point;
+  for(size_t i=0; i<scan_size; i++){
+    if(isfinite(msg->ranges[i])){
+      new_point.range = msg->ranges[i];
+      new_point.angle = i*angle_increment;
+      polar_points.push_back(new_point);
+    }
+  }
+
+  point_solver.update_point_cloud(polar_points);
+  // point_solver.polar_point_to_coord(current_pose.x,current_pose.y,current_pose.angle,polar_points,coord_points);  
+  // for(size_t i=0; i<coord_points.size(); i++){
+  //   ROS_INFO("Node listener heard scan: point[%ld]=(%f,%f)",i,coord_points[i].x,coord_points[i].y);
+  // }
+}
+
+void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
+{
+  double v = msg->linear.x;
+  double w = msg->angular.z;
+  ekf_slam_solver.predict(v,w,0.1);
+  estimate_pose.x = ekf_slam_solver.pose[0];
+  estimate_pose.y = ekf_slam_solver.pose[1];
+  estimate_pose.angle = ekf_slam_solver.pose[2];
+
+  static tf::TransformBroadcaster br;
+  tf::Transform transform;
+  transform.setOrigin(tf::Vector3(estimate_pose.x, estimate_pose.y, 0.0));
+  tf::Quaternion q;
+  q.setRPY(0, 0, estimate_pose.angle);
+  transform.setRotation(q);
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "estimation"));
+  // ROS_INFO("Node listener heard vel: vel=%f,w=%f",v,w);
+  ROS_INFO("estimation:%f,%f,%f",estimate_pose.x,estimate_pose.y,estimate_pose.angle);
+  ROS_INFO("Node listener heard Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
+}
+
+int main(int argc, char **argv)
+{
+  ros::init(argc, argv, "listener");
+  ros::NodeHandle n;
+
+  ros::Subscriber sub = n.subscribe("/odom", 1000, OdomCallback);
+  ros::Subscriber sub2 = n.subscribe("/imu", 1000, ImuCallback);
+  ros::Subscriber sub3 = n.subscribe("/scan", 1000, ScanCallback);
+  ros::Subscriber sub4 = n.subscribe("/cmd_vel", 1000, VelCallback);
+
+  ros::spin();
+  return 0;
+}
