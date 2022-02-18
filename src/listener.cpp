@@ -7,11 +7,11 @@
 #include "tf/transform_broadcaster.h"
 #include "../include/ekf_slam/point_solver.h"
 #include "../include/ekf_slam/ekf_slam_solver.h"
-
+const std::vector<double> CONST_OBSTACLE = {-2,-2,-2,-1,-2,0,-2,1,-2,2, -1,-2,-1,-1,-1,0,-1,1,-1,2, 0,-2,0,-1,0,1,0,2, 1,-2,1,-1,1,0,1,1,1,2, 2,-2,2,-1,2,0,2,1,2,2};
 CoordPoint current_pose;
 CoordPoint estimate_pose;
 PointSolver point_solver;
-EkfSlamSolver ekf_slam_solver;
+EkfSlamSolver ekf_slam_solver(0,0,0,CONST_OBSTACLE);
 
 void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
@@ -70,6 +70,7 @@ void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
   }
 
   point_solver.update_point_cloud(polar_points);
+  ekf_slam_solver.observe(point_solver);
   // point_solver.polar_point_to_coord(current_pose.x,current_pose.y,current_pose.angle,polar_points,coord_points);  
   // for(size_t i=0; i<coord_points.size(); i++){
   //   ROS_INFO("Node listener heard scan: point[%ld]=(%f,%f)",i,coord_points[i].x,coord_points[i].y);

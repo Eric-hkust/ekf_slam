@@ -54,17 +54,17 @@ void PointSolver::polar_point_to_coord(const double & x_, const double & y_, con
     for(auto i:polar_points){
         temp_point.x = x_ + i.range * cos(i.angle + angle_);
         temp_point.y = y_ + i.range * sin(i.angle + angle_);
-        temp_point.angle = i.angle + angle_;
+        temp_point.angle = 0;
         coord_points.push_back(temp_point);
     }
 }
 
-size_t PointSolver::cluster_point_to_object(const std::vector<PolarPoint> & point_cloud, std::vector<PolarPoint> & object)
+size_t PointSolver::cluster_point_to_object(std::vector<PolarPoint> & object)
 {
     object.clear();
     std::vector<PolarPoint> temp_point;
     PolarPoint temp;
-    for(auto i:point_cloud){
+    for(auto i:new_point_cloud){
         if(temp_point.size() == 0){
             temp_point.push_back(i);
         }
@@ -123,23 +123,5 @@ size_t PointSolver::match_object_object(const std::vector<PolarPoint> & object_1
 void PointSolver::estimate_move(CoordPoint & movement)
 {
     // ROS_INFO("Node listener heard scan: new point number = %ld, old point number = %ld", new_point_cloud.size(), old_point_cloud.size());
-    std::vector<PolarPoint> objects1,objects2;
-    std::vector<PolarPoint> new_objects_polar,old_objects_polar;
-    std::vector<CoordPoint> new_objects_coord,old_objects_coord;
-    std::vector<size_t> index_match;
-
-    size_t object_number1 = cluster_point_to_object(new_point_cloud, objects1);
-    size_t object_number2 = cluster_point_to_object(old_point_cloud,objects2);
-    size_t match_number = match_object_object(objects1,objects2,index_match);
-    // ROS_INFO("Node listener heard scan: new object's number = %ld, old object's number = %ld, match number = %ld", object_number1,object_number2,match_number);
-
-    movement.x = 0;
-    movement.y = 0;
-    movement.angle = 0;
-    for(size_t i=0; i<match_number; i++){
-        new_objects_polar.push_back(objects1[index_match[2*i]]);
-        old_objects_polar.push_back(objects2[index_match[2*i+1]]);
-    }
-    polar_point_to_coord(0,0,0,new_objects_polar,new_objects_coord);
-    polar_point_to_coord(0,0,0,old_objects_polar,old_objects_coord);
+    return;
 }
