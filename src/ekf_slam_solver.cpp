@@ -12,14 +12,14 @@ EkfSlamSolver::EkfSlamSolver()
      object_size = 0;
      pose[0] = pose[1] = pose[2] = 0;
      pose_es = VectorXd::Zero(matrix_size);
-     cov = MatrixXd::Identity(matrix_size,matrix_size)*0;
+     cov = MatrixXd::Identity(matrix_size,matrix_size)*0.001;
      // cov = MatrixXd::Zero(matrix_size,matrix_size);
     
-     R << 0,0,0,
-          0,0,0,
-          0,0,0;
-     Q << 0,0,
-          0,0;        
+     R << 0.0001,0,0,
+          0,0.0001,0,
+          0,0,0.001;
+     Q << 0.0001,0,
+          0,0.0001;        
 }
 
 EkfSlamSolver::EkfSlamSolver(const double & x, const double & y, const double & angle, const vector<double> & obstacle)

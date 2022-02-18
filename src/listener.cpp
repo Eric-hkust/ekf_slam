@@ -1,3 +1,4 @@
+#include <fstream>
 #include "ros/ros.h"
 #include "nav_msgs/Odometry.h"
 #include "sensor_msgs/Imu.h"
@@ -7,11 +8,14 @@
 #include "tf/transform_broadcaster.h"
 #include "../include/ekf_slam/point_solver.h"
 #include "../include/ekf_slam/ekf_slam_solver.h"
+
 const std::vector<double> CONST_OBSTACLE = {-2,-2,-2,-1,-2,0,-2,1,-2,2, -1,-2,-1,-1,-1,0,-1,1,-1,2, 0,-2,0,-1,0,1,0,2, 1,-2,1,-1,1,0,1,1,1,2, 2,-2,2,-1,2,0,2,1,2,2};
+
 CoordPoint current_pose;
 CoordPoint estimate_pose;
 PointSolver point_solver;
 EkfSlamSolver ekf_slam_solver(0,0,0,CONST_OBSTACLE);
+EkfSlamSolver odom_estimator;
 
 void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
@@ -24,7 +28,6 @@ void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
   tf2::fromMsg(msg->pose.pose.orientation, quat_tf);
   tf2::Matrix3x3(quat_tf).getRPY(roll,pitch,yaw);
   current_pose.angle = yaw;
-
   // ROS_INFO("Node listener heard Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
 }
 
@@ -71,6 +74,7 @@ void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 
   point_solver.update_point_cloud(polar_points);
   ekf_slam_solver.observe(point_solver);
+
   // point_solver.polar_point_to_coord(current_pose.x,current_pose.y,current_pose.angle,polar_points,coord_points);  
   // for(size_t i=0; i<coord_points.size(); i++){
   //   ROS_INFO("Node listener heard scan: point[%ld]=(%f,%f)",i,coord_points[i].x,coord_points[i].y);
@@ -81,6 +85,7 @@ void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
 {
   double v = msg->linear.x;
   double w = msg->angular.z;
+  odom_estimator.predict(v,w,0.1);
   ekf_slam_solver.predict(v,w,0.1);
   estimate_pose.x = ekf_slam_solver.pose[0];
   estimate_pose.y = ekf_slam_solver.pose[1];
@@ -88,18 +93,32 @@ void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
 
   static tf::TransformBroadcaster br;
   tf::Transform transform;
-  transform.setOrigin(tf::Vector3(estimate_pose.x, estimate_pose.y, 0.0));
   tf::Quaternion q;
-  q.setRPY(0, 0, estimate_pose.angle);
+
+  transform.setOrigin(tf::Vector3(ekf_slam_solver.pose[0], ekf_slam_solver.pose[1], 0.0));
+  q.setRPY(0, 0, ekf_slam_solver.pose[2]);
   transform.setRotation(q);
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "estimation"));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "ekf_estimator"));
+
+  transform.setOrigin(tf::Vector3(odom_estimator.pose[0], odom_estimator.pose[1], 0.0));
+  q.setRPY(0, 0, odom_estimator.pose[2]);
+  transform.setRotation(q);
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "odom_estimator"));
+
   // ROS_INFO("Node listener heard vel: vel=%f,w=%f",v,w);
-  ROS_INFO("estimation:%f,%f,%f",estimate_pose.x,estimate_pose.y,estimate_pose.angle);
+  ROS_INFO("odom estimation:%f,%f,%f",odom_estimator.pose[0],odom_estimator.pose[1],odom_estimator.pose[2]);
+  ROS_INFO("ekf estimation:%f,%f,%f",estimate_pose.x,estimate_pose.y,estimate_pose.angle);
   ROS_INFO("Node listener heard Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
 }
 
 int main(int argc, char **argv)
 {
+  std::ofstream odom,ekf,real,error;
+  odom.open("odom_path.txt");
+  ekf.open("ekf_path.txt");
+  real.open("real_path.txt");
+  error.open("error.txt");
+
   ros::init(argc, argv, "listener");
   ros::NodeHandle n;
 
@@ -108,6 +127,19 @@ int main(int argc, char **argv)
   ros::Subscriber sub3 = n.subscribe("/scan", 1000, ScanCallback);
   ros::Subscriber sub4 = n.subscribe("/cmd_vel", 1000, VelCallback);
 
-  ros::spin();
+  ros::Rate loop_rate(10);
+  while (ros::ok()){
+    odom<<odom_estimator.pose[0]<<" "<<odom_estimator.pose[1]<<std::endl;
+    ekf<<ekf_slam_solver.pose[0]<<" "<<ekf_slam_solver.pose[1]<<std::endl;
+    real<<current_pose.x<<" "<<current_pose.y<<std::endl;
+    error<<pow(pow(odom_estimator.pose[0]-current_pose.x,2)+pow(odom_estimator.pose[1]-current_pose.y,2),0.5)<< " "<<pow(pow(ekf_slam_solver.pose[0]-current_pose.x,2)+pow(ekf_slam_solver.pose[1]-current_pose.y,2),0.5)<<std::endl;
+    ros::spinOnce();
+    loop_rate.sleep();
+  }
+  odom.close();
+  ekf.close();
+  real.close();
+  error.close();
+
   return 0;
 }
