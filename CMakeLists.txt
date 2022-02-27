@@ -24,5 +24,5 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
-add_executable(listener src/listener.cpp src/point_solver.cpp src/ekf_slam_solver.cpp)
+add_executable(listener src/listener.cpp src/point_solver.cpp src/ekf_slam_solver.cpp src/icp.cpp)
 target_link_libraries(listener ${catkin_LIBRARIES})

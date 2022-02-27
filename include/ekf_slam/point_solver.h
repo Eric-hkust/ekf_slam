@@ -26,12 +26,18 @@ class PointSolver
 {
 public:
     std::vector<PolarPoint> new_point_cloud, old_point_cloud;
-    PointSolver();  
-    void polar_point_to_coord(const double & x_, const double & y_, const double & angle_, const std::vector<PolarPoint> & polar_points, std::vector<CoordPoint> & coord_points);
+    PointSolver();
     void update_point_cloud(const std::vector<PolarPoint> & input_new_point_cloud);
-    void estimate_move(CoordPoint & movement);
-    size_t cluster_point_to_object(std::vector<PolarPoint> & object);
-    size_t match_object_object(const std::vector<PolarPoint> & object_1, const std::vector<PolarPoint> & object_2, std::vector<size_t> & index_match);
+    void estimate_point_pose(const double & x_, const double & y_, const double & angle_, std::vector<CoordPoint> & coord_points);
+    void estimate_object_pose(const double & x_, const double & y_, const double & angle_, const double & r_, std::vector<CoordPoint> & object, const bool flag=true);
+    void estimate_move(const double & angle_, CoordPoint & movement);
+    void polar_point_to_coord(const double & x_, const double & y_, const double & angle_, const std::vector<PolarPoint> & polar_points, std::vector<CoordPoint> & coord_points);
+    void coord_point_to_polar(const double & x_, const double & y_, const double & angle_, const std::vector<CoordPoint> & coord_points, std::vector<PolarPoint> & polar_points);
+private:
+    size_t cluster_point(const std::vector<PolarPoint> & point_cloud, std::vector<std::vector<PolarPoint>> & points_cluster);
+    size_t points_cluster_to_object(const double & x_, const double & y_, const double & angle_, const std::vector<std::vector<PolarPoint>> & points_cluster, std::vector<CoordPoint> & object);
+    size_t points_cluster_to_column(const double & x_, const double & y_, const double & angle_, const double & r_, const std::vector<std::vector<PolarPoint>> & points_cluster, std::vector<CoordPoint> & colunm);
+    double norm_angle(const double & angle_);
 };
 
 #endif

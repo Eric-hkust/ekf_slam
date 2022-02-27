@@ -97,8 +97,8 @@ void EkfSlamSolver::observe(PointSolver & point_solver)
      vector<PolarPoint> polar_objects;
      vector<CoordPoint> coord_objects;
      size_t object_number;
-     point_solver.cluster_point_to_object(polar_objects);
-     point_solver.polar_point_to_coord(pose[0],pose[1],pose[2],polar_objects,coord_objects);
+     point_solver.estimate_object_pose(pose[0],pose[1],pose[2],0.05,coord_objects);
+     point_solver.coord_point_to_polar(pose[0],pose[1],pose[2],coord_objects,polar_objects);
      object_number = polar_objects.size();
 
      for(size_t i=0; i<object_number; i++){

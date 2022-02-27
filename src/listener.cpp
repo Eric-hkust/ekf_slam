@@ -12,10 +12,13 @@
 const std::vector<double> CONST_OBSTACLE = {-2,-2,-2,-1,-2,0,-2,1,-2,2, -1,-2,-1,-1,-1,0,-1,1,-1,2, 0,-2,0,-1,0,1,0,2, 1,-2,1,-1,1,0,1,1,1,2, 2,-2,2,-1,2,0,2,1,2,2};
 
 CoordPoint current_pose;
-CoordPoint estimate_pose;
+CoordPoint estimate_icp;
+CoordPoint estimate_ekf;
+CoordPoint estimate_predict;
 PointSolver point_solver;
 EkfSlamSolver ekf_slam_solver(0,0,0,CONST_OBSTACLE);
-EkfSlamSolver odom_estimator;
+EkfSlamSolver odom_predict_solver;
+double error;
 
 void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
 {
@@ -43,12 +46,14 @@ void ImuCallback(const sensor_msgs::Imu::ConstPtr& msg)
   tf2::fromMsg(msg->orientation, quat_tf);
   tf2::Matrix3x3(quat_tf).getRPY(roll,pitch,yaw);
   eular_angle = yaw;
-  // get acceleration
-  acceleration[0] = msg->linear_acceleration.x;
-  acceleration[1] = msg->linear_acceleration.y;
-  //get angular_velocity
-  angular_velocity = msg->angular_velocity.z;
-  
+
+  // get icp angle
+  estimate_icp.angle = eular_angle;
+  // // get acceleration
+  // acceleration[0] = msg->linear_acceleration.x;
+  // acceleration[1] = msg->linear_acceleration.y;
+  // //get angular_velocity
+  // angular_velocity = msg->angular_velocity.z;
   // ROS_INFO("Node listener heard Odom: eular_angle=%f, acceleration=(%f,%f), angular_velocity=%f", \
            eular_angle,acceleration[0], acceleration[1], angular_velocity);
 }
@@ -71,54 +76,67 @@ void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
       polar_points.push_back(new_point);
     }
   }
-
   point_solver.update_point_cloud(polar_points);
-  ekf_slam_solver.observe(point_solver);
 
-  // point_solver.polar_point_to_coord(current_pose.x,current_pose.y,current_pose.angle,polar_points,coord_points);  
-  // for(size_t i=0; i<coord_points.size(); i++){
-  //   ROS_INFO("Node listener heard scan: point[%ld]=(%f,%f)",i,coord_points[i].x,coord_points[i].y);
-  // }
+  // icp
+  point_solver.estimate_move(estimate_icp.angle,movement);
+  estimate_icp.x += movement.x;
+  estimate_icp.y += movement.y;
+  // estimate_icp.angle += movement.angle;
+
+  // ekf observe
+  ekf_slam_solver.observe(point_solver);
 }
 
 void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
 {
   double v = msg->linear.x;
   double w = msg->angular.z;
-  odom_estimator.predict(v,w,0.1);
-  ekf_slam_solver.predict(v,w,0.1);
-  estimate_pose.x = ekf_slam_solver.pose[0];
-  estimate_pose.y = ekf_slam_solver.pose[1];
-  estimate_pose.angle = ekf_slam_solver.pose[2];
+  // ROS_INFO("Node listener heard vel: vel=%f,w=%f",v,w);
 
+  // ekf predict
+  ekf_slam_solver.predict(v,w,0.1);
+  estimate_ekf.x = ekf_slam_solver.pose[0];
+  estimate_ekf.y = ekf_slam_solver.pose[1];
+  estimate_ekf.angle = ekf_slam_solver.pose[2];
+
+  // odom predict
+  odom_predict_solver.predict(v,w,0.1);
+  estimate_predict.x = odom_predict_solver.pose[0];
+  estimate_predict.y = odom_predict_solver.pose[1];
+  estimate_predict.angle = odom_predict_solver.pose[2];
+}
+
+void publish_tf()
+{
   static tf::TransformBroadcaster br;
   tf::Transform transform;
   tf::Quaternion q;
 
-  transform.setOrigin(tf::Vector3(ekf_slam_solver.pose[0], ekf_slam_solver.pose[1], 0.0));
-  q.setRPY(0, 0, ekf_slam_solver.pose[2]);
+  transform.setOrigin(tf::Vector3(estimate_ekf.x, estimate_ekf.y, 0.0));
+  q.setRPY(0, 0, estimate_ekf.angle);
   transform.setRotation(q);
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "ekf_estimator"));
 
-  transform.setOrigin(tf::Vector3(odom_estimator.pose[0], odom_estimator.pose[1], 0.0));
-  q.setRPY(0, 0, odom_estimator.pose[2]);
+  transform.setOrigin(tf::Vector3(estimate_predict.x, estimate_predict.y, 0.0));
+  q.setRPY(0, 0, estimate_predict.angle);
   transform.setRotation(q);
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "odom_estimator"));
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "predict_estimator"));
 
-  // ROS_INFO("Node listener heard vel: vel=%f,w=%f",v,w);
-  ROS_INFO("odom estimation:%f,%f,%f",odom_estimator.pose[0],odom_estimator.pose[1],odom_estimator.pose[2]);
-  ROS_INFO("ekf estimation:%f,%f,%f",estimate_pose.x,estimate_pose.y,estimate_pose.angle);
-  ROS_INFO("Node listener heard Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
+  transform.setOrigin(tf::Vector3(estimate_icp.x, estimate_icp.y, 0.0));
+  q.setRPY(0, 0, estimate_icp.angle);
+  transform.setRotation(q);
+  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "icp_estimator"));
+  
+  // ROS_INFO("---------------publish tf----------------");
+  // ROS_INFO("ekf estimation: x=%f, y=%f, eular_angle=%f",estimate_ekf.x,estimate_ekf.y,estimate_ekf.angle);
+  // ROS_INFO("predict estimation: x=%f, y=%f, eular_angle=%f",estimate_predict.x,estimate_predict.y,estimate_predict.angle);
+  // ROS_INFO("icp estimation: x=%f, y=%f, eular_angle=%f",estimate_icp.x,estimate_icp.y,estimate_icp.angle);
+  // ROS_INFO("real Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
 }
 
 int main(int argc, char **argv)
 {
-  std::ofstream odom,ekf,real,error;
-  odom.open("odom_path.txt");
-  ekf.open("ekf_path.txt");
-  real.open("real_path.txt");
-  error.open("error.txt");
-
   ros::init(argc, argv, "listener");
   ros::NodeHandle n;
 
@@ -128,18 +146,18 @@ int main(int argc, char **argv)
   ros::Subscriber sub4 = n.subscribe("/cmd_vel", 1000, VelCallback);
 
   ros::Rate loop_rate(10);
+  std::ofstream path_file, error_file;
+  path_file.open("icp_path.txt");
+  error_file.open("icp_error.txt");
   while (ros::ok()){
-    odom<<odom_estimator.pose[0]<<" "<<odom_estimator.pose[1]<<std::endl;
-    ekf<<ekf_slam_solver.pose[0]<<" "<<ekf_slam_solver.pose[1]<<std::endl;
-    real<<current_pose.x<<" "<<current_pose.y<<std::endl;
-    error<<pow(pow(odom_estimator.pose[0]-current_pose.x,2)+pow(odom_estimator.pose[1]-current_pose.y,2),0.5)<< " "<<pow(pow(ekf_slam_solver.pose[0]-current_pose.x,2)+pow(ekf_slam_solver.pose[1]-current_pose.y,2),0.5)<<std::endl;
+    publish_tf();
+    error = pow(pow(estimate_icp.x-current_pose.x,2)+pow(estimate_icp.y-current_pose.y,2),0.5);
+    path_file<<estimate_icp.x<<" "<<estimate_icp.y<<std::endl;
+    error_file<<error<<std::endl;
     ros::spinOnce();
     loop_rate.sleep();
   }
-  odom.close();
-  ekf.close();
-  real.close();
-  error.close();
-
+  path_file.close();
+  error_file.close();
   return 0;
 }
