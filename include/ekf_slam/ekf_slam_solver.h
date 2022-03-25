@@ -10,6 +10,7 @@ class EkfSlamSolver
 {
 public:
     double pose[3];
+    std::vector<double> obstacle_pose;
     EkfSlamSolver();
     EkfSlamSolver(const double & x, const double & y, const double & angle, const std::vector<double> & obstacle);
     void predict(const double & v, const double & w, const double & dt);
@@ -21,6 +22,7 @@ private:
     size_t object_size;
     Eigen::Matrix3d R;
     Eigen::Matrix2d Q;
+    void write_obstacle_to_pose();
     void observe_one(const double & r, const double & angle, const size_t & match_index);
     bool in_previous_observation(const double &x, const double &y, size_t & match_index);
     double norm_angle(const double & angle_);

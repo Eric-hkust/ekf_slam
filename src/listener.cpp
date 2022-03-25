@@ -8,16 +8,19 @@
 #include "tf/transform_broadcaster.h"
 #include "../include/ekf_slam/point_solver.h"
 #include "../include/ekf_slam/ekf_slam_solver.h"
+#include "gazebo_msgs/ModelStates.h"
+#include "geometry_msgs/Pose.h"
+#include "visualization_msgs/MarkerArray.h"
 
+// const std::vector<double> CONST_OBSTACLE = {-2,-2,-2,-1,-2,0,-2,1,-2,2, -1,-2,-1,-1,-1,0,-1,1,-1,2, 0,-2,0,-1,0,1,0,2, 1,-2,1,-1,1,0,1,1,1,2, 2,-2,2,-1,2,0,2,1,2,2};
 const std::vector<double> CONST_OBSTACLE = {-2,-2,-2,-1,-2,0,-2,1,-2,2, -1,-2,-1,-1,-1,0,-1,1,-1,2, 0,-2,0,-1,0,1,0,2, 1,-2,1,-1,1,0,1,1,1,2, 2,-2,2,-1,2,0,2,1,2,2};
 
-CoordPoint current_pose;
-CoordPoint estimate_icp;
-CoordPoint estimate_ekf;
-CoordPoint estimate_predict;
+CoordPoint current_pose(3,3,0);
+CoordPoint estimate_icp(3,3,0);
+CoordPoint estimate_ekf(3,3,0);
 PointSolver point_solver;
-EkfSlamSolver ekf_slam_solver(0,0,0,CONST_OBSTACLE);
-EkfSlamSolver odom_predict_solver;
+EkfSlamSolver ekf_slam_solver(3,3,0,CONST_OBSTACLE);
+std::vector<double> obstacle_pose;
 double error;
 
 void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -83,7 +86,7 @@ void ScanCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
   estimate_icp.x += movement.x;
   estimate_icp.y += movement.y;
   // estimate_icp.angle += movement.angle;
-
+  // point_solver.estimate_obstacle(current_pose.x,current_pose.y,current_pose.angle,0.05,obstacle_pose,true);
   // ekf observe
   ekf_slam_solver.observe(point_solver);
 }
@@ -99,12 +102,7 @@ void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
   estimate_ekf.x = ekf_slam_solver.pose[0];
   estimate_ekf.y = ekf_slam_solver.pose[1];
   estimate_ekf.angle = ekf_slam_solver.pose[2];
-
-  // odom predict
-  odom_predict_solver.predict(v,w,0.1);
-  estimate_predict.x = odom_predict_solver.pose[0];
-  estimate_predict.y = odom_predict_solver.pose[1];
-  estimate_predict.angle = odom_predict_solver.pose[2];
+  obstacle_pose = ekf_slam_solver.obstacle_pose;
 }
 
 void publish_tf()
@@ -118,11 +116,6 @@ void publish_tf()
   transform.setRotation(q);
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "ekf_estimator"));
 
-  transform.setOrigin(tf::Vector3(estimate_predict.x, estimate_predict.y, 0.0));
-  q.setRPY(0, 0, estimate_predict.angle);
-  transform.setRotation(q);
-  br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "predict_estimator"));
-
   transform.setOrigin(tf::Vector3(estimate_icp.x, estimate_icp.y, 0.0));
   q.setRPY(0, 0, estimate_icp.angle);
   transform.setRotation(q);
@@ -130,9 +123,58 @@ void publish_tf()
   
   // ROS_INFO("---------------publish tf----------------");
   // ROS_INFO("ekf estimation: x=%f, y=%f, eular_angle=%f",estimate_ekf.x,estimate_ekf.y,estimate_ekf.angle);
-  // ROS_INFO("predict estimation: x=%f, y=%f, eular_angle=%f",estimate_predict.x,estimate_predict.y,estimate_predict.angle);
   // ROS_INFO("icp estimation: x=%f, y=%f, eular_angle=%f",estimate_icp.x,estimate_icp.y,estimate_icp.angle);
   // ROS_INFO("real Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
+}
+
+void publish_obstacle(ros::Publisher & vis_obstacle_pub)
+{
+  visualization_msgs::MarkerArray marker_array;
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "odom";
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "my_namespace";
+  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.pose.position.x = 1;
+  marker.pose.position.y = 1;
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  marker.scale.x = 0.1;
+  marker.scale.y = 0.1;
+  marker.color.a = 1.0; // Don't forget to set the alpha!
+  marker.color.g = 1.0;
+  for(size_t i=0;i<obstacle_pose.size()/2;i++){
+    marker.id = i;
+    marker.pose.position.x = obstacle_pose[2*i];
+    marker.pose.position.y = obstacle_pose[2*i+1];
+
+    marker_array.markers.push_back(marker);
+  }
+  vis_obstacle_pub.publish(marker_array);
+}
+
+void publish_model_state(ros::Publisher & model_pose_pub)
+{
+    geometry_msgs::Pose vehicle_pose_pub;
+    geometry_msgs::Pose obstacle_pose_pub;
+    gazebo_msgs::ModelStates msg;
+    
+    //update vehicle pose
+    vehicle_pose_pub.position.x = current_pose.x;
+    vehicle_pose_pub.position.y = current_pose.y;
+    vehicle_pose_pub.position.z = current_pose.angle; //attention! some tricks here
+    msg.pose.push_back(vehicle_pose_pub);
+
+    //update obstacle pose
+    for(size_t i=0;i<CONST_OBSTACLE.size()/2;i++){
+      obstacle_pose_pub.position.x = CONST_OBSTACLE[i*2]+3;
+      obstacle_pose_pub.position.y = CONST_OBSTACLE[i*2+1]+3;
+      msg.pose.push_back(obstacle_pose_pub);
+    }
+    model_pose_pub.publish(msg);
 }
 
 int main(int argc, char **argv)
@@ -144,20 +186,24 @@ int main(int argc, char **argv)
   ros::Subscriber sub2 = n.subscribe("/imu", 1000, ImuCallback);
   ros::Subscriber sub3 = n.subscribe("/scan", 1000, ScanCallback);
   ros::Subscriber sub4 = n.subscribe("/cmd_vel", 1000, VelCallback);
+  ros::Publisher model_pose_pub = n.advertise<gazebo_msgs::ModelStates>("Environment", 1000);
+  ros::Publisher vis_obstacle_pub = n.advertise<visualization_msgs::MarkerArray>("vis_obstacle", 10);
 
   ros::Rate loop_rate(10);
   std::ofstream path_file, error_file;
-  path_file.open("icp_path.txt");
-  error_file.open("icp_error.txt");
+  // path_file.open("icp_path.txt");
+  // error_file.open("icp_error.txt");
   while (ros::ok()){
+    publish_model_state(model_pose_pub);    
     publish_tf();
-    error = pow(pow(estimate_icp.x-current_pose.x,2)+pow(estimate_icp.y-current_pose.y,2),0.5);
-    path_file<<estimate_icp.x<<" "<<estimate_icp.y<<std::endl;
-    error_file<<error<<std::endl;
+    publish_obstacle(vis_obstacle_pub);
+    // error = pow(pow(estimate_icp.x-current_pose.x,2)+pow(estimate_icp.y-current_pose.y,2),0.5);
+    // path_file<<estimate_icp.x<<" "<<estimate_icp.y<<std::endl;
+    // error_file<<error<<std::endl;
     ros::spinOnce();
     loop_rate.sleep();
   }
-  path_file.close();
-  error_file.close();
+  // path_file.close();
+  // error_file.close();
   return 0;
 }

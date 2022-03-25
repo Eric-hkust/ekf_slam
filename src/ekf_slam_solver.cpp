@@ -40,9 +40,10 @@ EkfSlamSolver::EkfSlamSolver(const double & x, const double & y, const double & 
      pose[1] = pose_es[1] = y;
      pose[2] = pose_es[2] = norm_angle(angle);
      for(size_t i=0; i<object_size; i++){
-         pose_es[3+i*2] = obstacle[2*i];
-         pose_es[3+i*2+1] = obstacle[2*i+1];
+         pose_es[3+i*2] = obstacle[2*i]+3;
+         pose_es[3+i*2+1] = obstacle[2*i+1]+3;
      }
+     write_obstacle_to_pose();
 
      R << 0.0001,0,0,
           0,0.0001,0,
@@ -76,6 +77,14 @@ void EkfSlamSolver::predict(const double & v, const double & w, const double & d
     pose[0] = pose_es[0]; pose[1] = pose_es[1]; pose[2] = pose_es[2];
     G = MatrixXd::Identity(matrix_size,matrix_size) + F*temp_*(F.transpose());
     cov = G*cov*(G.transpose()) + F*R*(F.transpose());
+    write_obstacle_to_pose();
+}
+
+void EkfSlamSolver::write_obstacle_to_pose()
+{
+     obstacle_pose.clear();
+     for(size_t i=0; i<object_size*2; i++)
+          obstacle_pose.push_back(pose_es[3+i]);
 }
 
 bool EkfSlamSolver::in_previous_observation(const double &x, const double &y, size_t & match_index)
@@ -155,6 +164,7 @@ void EkfSlamSolver::observe_one(const double & r, const double & angle, const si
      pose[0] = pose_es[0];
      pose[1] = pose_es[1];
      pose[2] = pose_es[2];
+     write_obstacle_to_pose();
 
      return;
 }

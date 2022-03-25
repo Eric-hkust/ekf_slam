@@ -28,8 +28,8 @@ public:
     std::vector<PolarPoint> new_point_cloud, old_point_cloud;
     PointSolver();
     void update_point_cloud(const std::vector<PolarPoint> & input_new_point_cloud);
-    void estimate_point_pose(const double & x_, const double & y_, const double & angle_, std::vector<CoordPoint> & coord_points);
     void estimate_object_pose(const double & x_, const double & y_, const double & angle_, const double & r_, std::vector<CoordPoint> & object, const bool flag=true);
+    size_t estimate_obstacle(const double & x_, const double & y_, const double & angle_, const double & r_, std::vector<double> & obstacle, const bool flag=true);
     void estimate_move(const double & angle_, CoordPoint & movement);
     void polar_point_to_coord(const double & x_, const double & y_, const double & angle_, const std::vector<PolarPoint> & polar_points, std::vector<CoordPoint> & coord_points);
     void coord_point_to_polar(const double & x_, const double & y_, const double & angle_, const std::vector<CoordPoint> & coord_points, std::vector<PolarPoint> & polar_points);

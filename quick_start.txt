@@ -19,3 +19,13 @@ cd ~/cxz/ws
 source devel/setup.bash
 export TURTLEBOT3_MODEL=burger
 rosrun ekf_slam listener
+
+cd ~/cxz/ws
+source devel/setup.bash
+export TURTLEBOT3_MODEL=burger
+rosrun ekf_slam Astar_node.py
+
+cd ~/cxz/ws
+source devel/setup.bash
+export TURTLEBOT3_MODEL=burger
+rosrun ekf_slam smooth_control_node.py

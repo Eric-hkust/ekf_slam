@@ -156,13 +156,6 @@ size_t PointSolver::points_cluster_to_column(const double & x_, const double & y
     return colunm.size();
 }
 
-
-void PointSolver::estimate_point_pose(const double & x_, const double & y_, const double & angle_, std::vector<CoordPoint> & coord_points)
-{
-    coord_points.clear();
-    polar_point_to_coord(x_,y_,angle_,new_point_cloud,coord_points);
-}
-
 void PointSolver::estimate_object_pose(const double & x_, const double & y_, const double & angle_, const double & r_, std::vector<CoordPoint> & object, const bool flag)
 {    
     object.clear();
@@ -174,6 +167,47 @@ void PointSolver::estimate_object_pose(const double & x_, const double & y_, con
         points_cluster_to_object(x_,y_,angle_,points_cluster,object);
 }
 
+size_t PointSolver::estimate_obstacle(const double & x_, const double & y_, const double & angle_, const double & r_, std::vector<double> & obstacle, const bool flag)
+{    
+    obstacle.clear();
+    if(new_point_cloud.size()==0 || old_point_cloud.size()==0)
+        return 0;
+
+    std::vector<std::vector<PolarPoint>> old_points_cluster,new_points_cluster;
+    std::vector<CoordPoint> temp_new_object, temp_old_object;
+    std::vector<CoordPoint> new_object, old_object;
+    cluster_point(new_point_cloud,new_points_cluster);
+    cluster_point(old_point_cloud,old_points_cluster);
+    if(flag == true){
+        points_cluster_to_column(x_,y_,angle_,r_,new_points_cluster,temp_new_object);
+        points_cluster_to_column(x_,y_,angle_,r_,old_points_cluster,temp_old_object);
+    }
+    else{
+        points_cluster_to_object(x_,y_,angle_,new_points_cluster,temp_new_object);
+        points_cluster_to_object(x_,y_,angle_,old_points_cluster,temp_old_object);
+    }
+    for(auto i:temp_new_object){
+        for(auto j:temp_old_object){
+            if((pow(i.x-j.x,2)+pow(i.y-j.y,2))<0.01){
+                new_object.push_back(i);
+                old_object.push_back(j);
+                break;
+            }
+        }
+    }
+    if(new_object.size()==0){
+        std::cout<<"there is no obstacle!"<<std::endl;
+        return 0;
+    }
+    else{
+        for(auto i:new_object){
+            obstacle.push_back(i.x);
+            obstacle.push_back(i.y);
+        }
+        return new_object.size();
+    }
+    
+}
 
 void PointSolver::estimate_move(const double & angle_, CoordPoint & movement)
 {

@@ -7,6 +7,8 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   nav_msgs
   geometry_msgs
+  gazebo_msgs
+  visualization_msgs
   Eigen3 REQUIRED
   tf
 )
@@ -26,3 +28,7 @@ include_directories(
 
 add_executable(listener src/listener.cpp src/point_solver.cpp src/ekf_slam_solver.cpp src/icp.cpp)
 target_link_libraries(listener ${catkin_LIBRARIES})
+
+catkin_install_python(PROGRAMS scripts/Astar_node.py scripts/Astar.py scripts/smooth_control_node.py scripts/trajectory.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
