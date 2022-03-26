@@ -98,7 +98,7 @@ void VelCallback(const geometry_msgs::Twist::ConstPtr& msg)
   // ROS_INFO("Node listener heard vel: vel=%f,w=%f",v,w);
 
   // ekf predict
-  ekf_slam_solver.predict(v,w,0.1);
+  ekf_slam_solver.predict(v,w,0.05);
   estimate_ekf.x = ekf_slam_solver.pose[0];
   estimate_ekf.y = ekf_slam_solver.pose[1];
   estimate_ekf.angle = ekf_slam_solver.pose[2];
@@ -122,9 +122,9 @@ void publish_tf()
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "icp_estimator"));
   
   // ROS_INFO("---------------publish tf----------------");
-  // ROS_INFO("ekf estimation: x=%f, y=%f, eular_angle=%f",estimate_ekf.x,estimate_ekf.y,estimate_ekf.angle);
-  // ROS_INFO("icp estimation: x=%f, y=%f, eular_angle=%f",estimate_icp.x,estimate_icp.y,estimate_icp.angle);
-  // ROS_INFO("real Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
+  ROS_INFO("ekf estimation: x=%f, y=%f, eular_angle=%f",estimate_ekf.x,estimate_ekf.y,estimate_ekf.angle);
+  ROS_INFO("icp estimation: x=%f, y=%f, eular_angle=%f",estimate_icp.x,estimate_icp.y,estimate_icp.angle);
+  ROS_INFO("real Odom: x=%f, y=%f, eular_angle=%f", current_pose.x, current_pose.y, current_pose.angle);
 }
 
 void publish_obstacle(ros::Publisher & vis_obstacle_pub)
@@ -163,9 +163,9 @@ void publish_model_state(ros::Publisher & model_pose_pub)
     gazebo_msgs::ModelStates msg;
     
     //update vehicle pose
-    vehicle_pose_pub.position.x = current_pose.x;
-    vehicle_pose_pub.position.y = current_pose.y;
-    vehicle_pose_pub.position.z = current_pose.angle; //attention! some tricks here
+    vehicle_pose_pub.position.x = estimate_ekf.x;
+    vehicle_pose_pub.position.y = estimate_ekf.y;
+    vehicle_pose_pub.position.z = estimate_ekf.angle; //attention! some tricks here
     msg.pose.push_back(vehicle_pose_pub);
 
     //update obstacle pose
@@ -191,19 +191,23 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(10);
   std::ofstream path_file, error_file;
-  // path_file.open("icp_path.txt");
-  // error_file.open("icp_error.txt");
+  std::ofstream path_file2;
+  path_file.open("real_path.txt");
+  path_file2.open("ekf_path.txt");
+  error_file.open("ekf_error.txt");
   while (ros::ok()){
     publish_model_state(model_pose_pub);    
     publish_tf();
     publish_obstacle(vis_obstacle_pub);
-    // error = pow(pow(estimate_icp.x-current_pose.x,2)+pow(estimate_icp.y-current_pose.y,2),0.5);
-    // path_file<<estimate_icp.x<<" "<<estimate_icp.y<<std::endl;
-    // error_file<<error<<std::endl;
+    error = pow(pow(estimate_ekf.x-current_pose.x,2)+pow(estimate_ekf.y-current_pose.y,2),0.5);
+    path_file<<current_pose.x<<" "<<current_pose.y<<std::endl;
+    path_file2<<estimate_ekf.x<<" "<<estimate_ekf.y<<std::endl;
+    error_file<<error<<std::endl;
     ros::spinOnce();
     loop_rate.sleep();
   }
-  // path_file.close();
-  // error_file.close();
+  path_file.close();
+  path_file2.close();
+  error_file.close();
   return 0;
 }

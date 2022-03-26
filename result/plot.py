@@ -19,13 +19,13 @@ def plot_error(file_,color_,label_):
     plt.plot(T,error,color_,label=label_)
 
 if __name__=="__main__":
-    file_name = "4"
+    file_name = "6"
     #plot path
     plt.figure(1)
     plot_path(file_name,"r","real_path")
-    plot_path(file_name,"g","predict_path")
+    # plot_path(file_name,"g","predict_path")
     plot_path(file_name,"y","ekf_path")
-    plot_path(file_name,"b","icp_path")
+    # plot_path(file_name,"b","icp_path")
     plt.title('the real path and the estimation')
     plt.xlabel('x')
     plt.ylabel('y')
@@ -34,9 +34,9 @@ if __name__=="__main__":
 
     #plot error
     plt.figure(2)
-    plot_error(file_name,"g","predict_error")
+    # plot_error(file_name,"g","predict_error")
     plot_error(file_name,"y","ekf_error")
-    plot_error(file_name,"b","icp_error")
+    # plot_error(file_name,"b","icp_error")
     plt.title('the error')
     plt.xlabel('t')
     plt.ylabel('error')
